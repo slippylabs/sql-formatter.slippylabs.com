@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Formatter // sql-formatter.slippylabs.com</title>
+<meta name="description" content="Format and minify SQL in the browser. Clause-aware line breaks, indented subqueries, keyword casing, and a token-preserving formatter that never rewrites your literals.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2234%22%20r%3D%2222%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2216%22%20r%3D%228%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3Ccircle%20cx%3D%2244%22%20cy%3D%2216%22%20r%3D%228%22%20fill%3D%22%231c8a52%22%20stroke%3D%22%2339ff8f%22%20stroke-width%3D%222%22%2F%3E%3C%2Fsvg%3E">
+<meta name="theme-color" content="#050b10">
+<link rel="stylesheet" href="style.css?v=5">
+</head>
+<body>
+
+<div class="starfield"></div>
+<div class="scanlines"></div>
+
+<main class="page-wrap">
+  <div class="hud-panel wide">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="callsign-row">
+      <div class="toad-avatar-wrap">
+        <svg class="toad-avatar" width="46" height="46" viewBox="0 0 64 64">
+          <circle cx="32" cy="34" r="22" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="44" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="3.5" fill="#050b10"/>
+          <circle cx="44" cy="16" r="3.5" fill="#050b10"/>
+          <ellipse cx="24" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <ellipse cx="40" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <circle cx="24" cy="30" r="1.4" fill="#39ff8f"/>
+          <circle cx="40" cy="30" r="1.4" fill="#39ff8f"/>
+          <path d="M22 42 Q32 48 42 42" stroke="#050b10" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="lock-reticle"></div>
+      </div>
+      <span class="callsign">Workshop Division // Tool</span>
+      <div class="nav-links">
+        <a href="https://projects.slippylabs.com/" class="logout-link">&larr; Archive</a>
+      </div>
+    </div>
+
+    <h1>SQL FORMATTER</h1>
+    <p class="subtitle">Paste a query and get it laid out properly — clauses on their own lines, sensible indentation, keywords cased how you like them. Strings and comments are left exactly as you wrote them.</p>
+
+    <div class="tool-field-row">
+      <label class="tool-field-label" for="sql-input">Input SQL</label>
+      <textarea class="tool-textarea" id="sql-input" spellcheck="false" style="min-height:140px"></textarea>
+    </div>
+
+    <div class="tool-controls">
+      <button class="tool-btn" id="format-btn">Format</button>
+      <button class="tool-btn" id="minify-btn">Minify</button>
+      <button class="tool-btn ghost" id="copy-btn">Copy Output</button>
+      <button class="tool-btn ghost" id="sample-btn">Load Sample</button>
+      <span class="copy-toast" id="copy-toast">Copied!</span>
+    </div>
+
+    <div class="tool-controls">
+      <label class="tool-field-label" for="case-select">Keywords</label>
+      <select class="tool-select" id="case-select">
+        <option value="upper">UPPERCASE</option>
+        <option value="lower">lowercase</option>
+        <option value="keep">Leave as typed</option>
+      </select>
+      <label class="tool-field-label" for="indent-select">Indent</label>
+      <select class="tool-select" id="indent-select">
+        <option value="2">2 spaces</option>
+        <option value="4" selected>4 spaces</option>
+        <option value="tab">Tab</option>
+      </select>
+      <label class="tool-check"><input type="checkbox" id="comma-check"> Leading commas</label>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-tile"><span class="stat-value" id="stat-tokens">0</span><span class="stat-label">Tokens</span></div>
+      <div class="stat-tile"><span class="stat-value" id="stat-statements">0</span><span class="stat-label">Statements</span></div>
+      <div class="stat-tile"><span class="stat-value" id="stat-lines">0</span><span class="stat-label">Output Lines</span></div>
+      <div class="stat-tile"><span class="stat-value" id="stat-check">&mdash;</span><span class="stat-label">Token Check</span></div>
+    </div>
+
+    <div class="tool-field-row">
+      <span class="tool-field-label">Output</span>
+      <pre class="tool-output" id="sql-output">Waiting for input…</pre>
+    </div>
+
+    <p class="tool-note">Format only ever moves whitespace and re-cases keywords &mdash; string literals, quoted identifiers and comments come through byte for byte. After every run the tool re-tokenises its own output and compares the token stream against the input's, and the Token Check tile reads <strong>match</strong> only when nothing was lost or invented. Minify is the one exception: a <code>--</code> comment would swallow the rest of a one-line query, so it is rewritten as a block comment. Subqueries get their own indented block; ordinary function-call parentheses stay on one line.</p>
+
+    <div class="comm-window">
+      <div class="comm-portrait">
+        <svg width="36" height="36" viewBox="0 0 64 64">
+          <circle cx="32" cy="34" r="22" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="44" cy="16" r="8" fill="#1c8a52" stroke="#39ff8f" stroke-width="2"/>
+          <circle cx="20" cy="16" r="3.5" fill="#050b10"/>
+          <circle cx="44" cy="16" r="3.5" fill="#050b10"/>
+          <ellipse cx="24" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <ellipse cx="40" cy="32" rx="4.5" ry="5.5" fill="#050b10"/>
+          <circle cx="24" cy="30" r="1.4" fill="#39ff8f"/>
+          <circle cx="40" cy="30" r="1.4" fill="#39ff8f"/>
+          <path d="M22 42 Q32 48 42 42" stroke="#050b10" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="comm-body">
+        <div class="comm-label"><span class="dot"></span> Incoming Transmission &mdash; Slippy</div>
+        <p>"A query you can read is a query you can fix at two in the morning."</p>
+      </div>
+    </div>
+
+    <a href="https://projects.slippylabs.com/" class="hud-btn">&larr; Back to Archive</a>
+  </div>
+</main>
+
+<script>
+const SAMPLE = "with recent as (select customer_id, max(order_date) as last_order from orders where status <> 'cancelled' and order_date >= '2026-01-01' group by customer_id having count(*) > 2) select c.id, c.name, c.email, r.last_order, (select count(*) from orders o where o.customer_id = c.id) as order_count from customers c inner join recent r on r.customer_id = c.id left join regions g on g.id = c.region_id where c.active = true and (c.tier in ('gold','platinum') or c.lifetime_value > 5000) order by r.last_order desc, c.name asc limit 50;";
+
+const KEYWORDS = new Set(['SELECT','FROM','WHERE','GROUP','BY','HAVING','ORDER','LIMIT','OFFSET','INSERT','INTO','VALUES','UPDATE','SET','DELETE','WITH','RECURSIVE','AS','ON','AND','OR','NOT','NULL','IS','IN','EXISTS','BETWEEN','LIKE','ILIKE','JOIN','INNER','LEFT','RIGHT','FULL','OUTER','CROSS','LATERAL','UNION','ALL','INTERSECT','EXCEPT','DISTINCT','CASE','WHEN','THEN','ELSE','END','ASC','DESC','CREATE','TABLE','VIEW','INDEX','DROP','ALTER','ADD','COLUMN','PRIMARY','KEY','FOREIGN','REFERENCES','UNIQUE','DEFAULT','CONSTRAINT','CAST','OVER','PARTITION','WINDOW','RETURNING','CONFLICT','DO','NOTHING','USING','TRUE','FALSE','FETCH','NEXT','ROWS','ONLY','FIRST','LAST','NULLS','FILTER','WITHIN','GROUPS','EXCLUDE','TEMP','TEMPORARY','IF','REPLACE','MATERIALIZED']);
+
+// Clauses that always begin a fresh line at the current block indent.
+const CLAUSE_STARTERS = ['SELECT','FROM','WHERE','GROUP BY','HAVING','ORDER BY','LIMIT','OFFSET','UNION ALL','UNION','INTERSECT','EXCEPT','INSERT INTO','VALUES','UPDATE','SET','DELETE FROM','WITH RECURSIVE','WITH','RETURNING','WINDOW','FETCH'];
+const JOIN_STARTERS = ['LEFT OUTER JOIN','RIGHT OUTER JOIN','FULL OUTER JOIN','CROSS JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','FULL JOIN','NATURAL JOIN','JOIN'];
+// These hang off the previous clause, indented one level.
+const SUB_STARTERS = ['ON','AND','OR'];
+
+// Clauses whose value is short enough to keep on the same line.
+const INLINE_CLAUSES = new Set(['LIMIT', 'OFFSET', 'FETCH']);
+// Keywords that are called like functions, so they hug their opening paren.
+const FUNCTION_KEYWORDS = new Set(['CAST', 'FILTER', 'OVER', 'COALESCE', 'EXTRACT', 'TRIM', 'SUBSTRING']);
+
+const NO_SPACE_BEFORE = new Set([',', ')', ';', '.', '::']);
+const NO_SPACE_AFTER = new Set(['(', '.', '::']);
+
+function tokenize(sql) {
+  const tokens = [];
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i];
+
+    if (/\s/.test(ch)) {
+      let j = i;
+      while (j < sql.length && /\s/.test(sql[j])) j++;
+      i = j;
+      continue;
+    }
+    if (ch === '-' && sql[i + 1] === '-') {
+      let j = sql.indexOf('\n', i);
+      if (j === -1) j = sql.length;
+      tokens.push({ type: 'comment', value: sql.slice(i, j) });
+      i = j;
+      continue;
+    }
+    if (ch === '/' && sql[i + 1] === '*') {
+      let j = sql.indexOf('*/', i + 2);
+      j = j === -1 ? sql.length : j + 2;
+      tokens.push({ type: 'comment', value: sql.slice(i, j), block: true });
+      i = j;
+      continue;
+    }
+    if (ch === "'") {
+      // Standard SQL doubles the quote to escape it: 'it''s'
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'") {
+          if (sql[j + 1] === "'") { j += 2; continue; }
+          j++;
+          break;
+        }
+        j++;
+      }
+      tokens.push({ type: 'string', value: sql.slice(i, j) });
+      i = j;
+      continue;
+    }
+    if (ch === '"' || ch === '`' || ch === '[') {
+      const close = ch === '[' ? ']' : ch;
+      let j = i + 1;
+      while (j < sql.length && sql[j] !== close) j++;
+      j = Math.min(j + 1, sql.length);
+      tokens.push({ type: 'quoted', value: sql.slice(i, j) });
+      i = j;
+      continue;
+    }
+    const rest = sql.slice(i);
+    let m = rest.match(/^\d+(\.\d+)?([eE][+-]?\d+)?/);
+    if (m) { tokens.push({ type: 'number', value: m[0] }); i += m[0].length; continue; }
+    m = rest.match(/^[A-Za-z_@#][A-Za-z0-9_$]*/);
+    if (m) {
+      const up = m[0].toUpperCase();
+      tokens.push({ type: KEYWORDS.has(up) ? 'keyword' : 'name', value: m[0], upper: up });
+      i += m[0].length;
+      continue;
+    }
+    m = rest.match(/^(<=>|<>|!=|<=|>=|\|\||::|->>|->|:=)/);
+    if (m) { tokens.push({ type: 'op', value: m[0] }); i += m[0].length; continue; }
+    tokens.push({ type: /[(),;.]/.test(ch) ? 'punct' : 'op', value: ch });
+    i++;
+  }
+  return tokens;
+}
+
+function renderCase(tok, mode) {
+  if (tok.type !== 'keyword' || mode === 'keep') return tok.value;
+  return mode === 'lower' ? tok.value.toLowerCase() : tok.upper;
+}
+
+// Match a multi-word phrase starting at index i; returns its token length or 0.
+function phraseAt(tokens, i, phrase) {
+  const words = phrase.split(' ');
+  for (let k = 0; k < words.length; k++) {
+    const t = tokens[i + k];
+    if (!t || t.type !== 'keyword' || t.upper !== words[k]) return 0;
+  }
+  return words.length;
+}
+
+function matchAny(tokens, i, list) {
+  for (const phrase of list) {
+    const n = phraseAt(tokens, i, phrase);
+    if (n) return { phrase: phrase, len: n };
+  }
+  return null;
+}
+
+// parts are { text, type, upper } so spacing can depend on what a token IS,
+// not just what it looks like — that is how count(*) keeps its paren but
+// IN ('a','b') keeps its space.
+function needsSpace(prev, next) {
+  if (NO_SPACE_BEFORE.has(next.text) || NO_SPACE_AFTER.has(prev.text)) return false;
+  if (next.text === '(') {
+    if (prev.type === 'name' || prev.type === 'quoted') return false;
+    if (prev.type === 'keyword' && FUNCTION_KEYWORDS.has(prev.upper)) return false;
+  }
+  return true;
+}
+
+function joinParts(parts) {
+  let out = '';
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0 && needsSpace(parts[i - 1], parts[i])) out += ' ';
+    out += parts[i].text;
+  }
+  return out;
+}
+
+function part(text, tok) {
+  return { text: text, type: tok ? tok.type : 'punct', upper: tok ? tok.upper : undefined };
+}
+
+function format(sql, opts) {
+  const tokens = tokenize(sql);
+  const indentStr = opts.indent === 'tab' ? '\t' : ' '.repeat(parseInt(opts.indent, 10));
+  const lines = [];
+  let cur = null;
+  // blockIndent is where clause keywords sit; a subquery paren pushes a new one
+  // relative to the line that opened it, so nested blocks line up under it.
+  let blockIndent = 0;
+  let inlineParens = 0;
+  const stack = [];
+
+  const startLine = (ind) => {
+    if (cur && cur.parts.length) lines.push(cur);
+    cur = { indent: ind, parts: [] };
+  };
+  const emit = (text, tok) => {
+    if (!cur) startLine(blockIndent);
+    cur.parts.push(part(text, tok));
+  };
+
+  startLine(0);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+
+    if (t.type === 'punct' && t.value === '(') {
+      // Look past the paren: a SELECT/WITH/VALUES means a real subquery.
+      const nxt = tokens[i + 1];
+      const isSub = nxt && nxt.type === 'keyword' && ['SELECT', 'WITH', 'VALUES'].includes(nxt.upper);
+      if (isSub) {
+        emit('(', t);
+        stack.push({ blockIndent: blockIndent, inlineParens: inlineParens, openIndent: cur.indent });
+        blockIndent = cur.indent + 1;
+        inlineParens = 0;
+        startLine(blockIndent);
+      } else {
+        inlineParens++;
+        emit('(', t);
+      }
+      continue;
+    }
+    if (t.type === 'punct' && t.value === ')') {
+      if (inlineParens > 0) {
+        inlineParens--;
+        emit(')', t);
+      } else if (stack.length) {
+        const s = stack.pop();
+        blockIndent = s.blockIndent;
+        inlineParens = s.inlineParens;
+        startLine(s.openIndent);
+        emit(')', t);
+      } else {
+        emit(')', t);
+      }
+      continue;
+    }
+    if (t.type === 'punct' && t.value === ',') {
+      if (inlineParens === 0) {
+        if (opts.leadingComma) {
+          startLine(blockIndent + 1);
+          emit(',', t);
+        } else {
+          emit(',', t);
+          startLine(blockIndent + 1);
+        }
+      } else {
+        emit(',', t);
+      }
+      continue;
+    }
+    if (t.type === 'punct' && t.value === ';') {
+      emit(';', t);
+      startLine(0);
+      blockIndent = 0;
+      inlineParens = 0;
+      stack.length = 0;
+      lines.push({ indent: 0, parts: [], blank: true });
+      continue;
+    }
+
+    if (t.type === 'keyword' && inlineParens === 0) {
+      const clause = matchAny(tokens, i, CLAUSE_STARTERS);
+      if (clause) {
+        startLine(blockIndent);
+        for (let k = 0; k < clause.len; k++) emit(renderCase(tokens[i + k], opts.keywordCase), tokens[i + k]);
+        // Everything the clause governs sits one level in — except the short ones.
+        if (!INLINE_CLAUSES.has(t.upper)) startLine(blockIndent + 1);
+        i += clause.len - 1;
+        continue;
+      }
+      const join = matchAny(tokens, i, JOIN_STARTERS);
+      if (join) {
+        startLine(blockIndent);
+        for (let k = 0; k < join.len; k++) emit(renderCase(tokens[i + k], opts.keywordCase), tokens[i + k]);
+        i += join.len - 1;
+        continue;
+      }
+      if (SUB_STARTERS.includes(t.upper)) {
+        startLine(blockIndent + 1);
+        emit(renderCase(t, opts.keywordCase), t);
+        continue;
+      }
+    }
+
+    emit(renderCase(t, opts.keywordCase), t);
+  }
+  if (cur && cur.parts.length) lines.push(cur);
+
+  const rendered = [];
+  for (const ln of lines) {
+    if (ln.blank) {
+      if (rendered.length && rendered[rendered.length - 1] !== '') rendered.push('');
+      continue;
+    }
+    if (!ln.parts.length) continue;
+    rendered.push(indentStr.repeat(ln.indent) + joinParts(ln.parts));
+  }
+  while (rendered.length && rendered[rendered.length - 1] === '') rendered.pop();
+  return rendered.join('\n');
+}
+
+function minify(sql, opts) {
+  const tokens = tokenize(sql).map(t => {
+    // A `-- comment` would swallow the rest of a single-line query, so it has
+    // to become a block comment. Any `*/` inside it is neutralised first.
+    if (t.type === 'comment' && !t.block) {
+      return { type: 'comment', block: true,
+               value: '/* ' + t.value.replace(/^--\s?/, '').replace(/\*\//g, '* /') + ' */' };
+    }
+    return t;
+  });
+  // No regex tidy-up pass here. An earlier version used one to space out `;`
+  // and cheerfully rewrote a semicolon that lived inside a string literal.
+  // Spacing is decided per token, so quoted text is never touched.
+  return joinParts(tokens.map(t => part(renderCase(t, opts.keywordCase), t))).trim();
+}
+
+// The safety net: formatting must be a pure whitespace/casing change.
+// Comments are excluded by default, because Minify legitimately rewrites a
+// line comment into block form while Format never touches one.
+function tokenSignature(sql, includeComments) {
+  return tokenize(sql).map(t => {
+    if (t.type === 'comment') return includeComments ? 'C:' + t.value : '';
+    if (t.type === 'keyword') return 'K:' + t.upper;
+    return t.type.charAt(0) + ':' + t.value;
+  }).join('|');
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { tokenize, format, minify, tokenSignature };
+}
+
+const input = document.getElementById('sql-input');
+const output = document.getElementById('sql-output');
+
+function currentOpts() {
+  return {
+    keywordCase: document.getElementById('case-select').value,
+    indent: document.getElementById('indent-select').value,
+    leadingComma: document.getElementById('comma-check').checked,
+  };
+}
+
+function run(mode) {
+  const sql = input.value.trim();
+  if (!sql) {
+    output.textContent = 'Waiting for input…';
+    output.classList.remove('error-text');
+    return;
+  }
+  const opts = currentOpts();
+  let result;
+  try {
+    result = mode === 'minify' ? minify(sql, opts) : format(sql, opts);
+  } catch (err) {
+    output.textContent = 'Could not format: ' + err.message;
+    output.classList.add('error-text');
+    return;
+  }
+  output.classList.remove('error-text');
+  output.textContent = result;
+
+  // Format must preserve comments verbatim too; Minify is allowed to convert
+  // a line comment to block form, so its check ignores comment text.
+  const strict = mode !== 'minify';
+  const before = tokenSignature(sql, strict);
+  const after = tokenSignature(result, strict);
+  const check = document.getElementById('stat-check');
+  const same = before === after;
+  check.textContent = same ? 'match' : 'DIFFERS';
+  check.style.color = same ? 'var(--hud-green)' : 'var(--hud-red)';
+
+  document.getElementById('stat-tokens').textContent = tokenize(sql).length.toLocaleString();
+  document.getElementById('stat-statements').textContent =
+    String(tokenize(sql).filter(t => t.value === ';').length || 1);
+  document.getElementById('stat-lines').textContent = result.split('\n').length.toLocaleString();
+}
+
+document.getElementById('format-btn').addEventListener('click', () => run('format'));
+document.getElementById('minify-btn').addEventListener('click', () => run('minify'));
+document.getElementById('sample-btn').addEventListener('click', () => {
+  input.value = SAMPLE;
+  run('format');
+});
+['case-select', 'indent-select', 'comma-check'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => run('format'));
+});
+input.addEventListener('input', () => run('format'));
+
+document.getElementById('copy-btn').addEventListener('click', async () => {
+  if (!output.textContent || output.classList.contains('error-text')) return;
+  try {
+    await navigator.clipboard.writeText(output.textContent);
+    const toast = document.getElementById('copy-toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1400);
+  } catch (err) {
+    output.textContent = 'Could not copy: clipboard access was denied.';
+  }
+});
+
+input.value = SAMPLE;
+run('format');
+</script>
+</body>
+</html>
